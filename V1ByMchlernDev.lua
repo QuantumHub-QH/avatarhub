@@ -10,6 +10,10 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local TOGGLE_IMAGE = "rbxassetid://134003209888315"
+-- Posisi toggle: naikin angka X (220) kalau mau lebih kanan, turunin kalau mau lebih kiri
+local TOGGLE_POS = UDim2.new(0, 220, 0, 6)
+local TOGGLE_SIZE = 42
+
 local PW, PH = 360, 470
 local C = {
     white = Color3.new(1, 1, 1), base = Color3.fromRGB(8, 8, 10), top = Color3.fromRGB(26, 26, 31),
@@ -25,7 +29,7 @@ local KINDS = {
     white = { Color3.fromRGB(14, 14, 17), C.line, C.text, false },
 }
 
-local mainFrame, saveData
+local mainFrame, saveData, applyItems
 
 local function new(class, props, parent)
     local o = Instance.new(class)
@@ -110,6 +114,7 @@ local ITEMS = mk{
     {"MAHKOTA ROYAL 8 BIT",10159600649},{"KUCING TABBY 8 BIT",10159617728},{"8 BIT KEHIDUPAN EKSTRA",10159606132},
     {"BAR HP 8 BIT",10159610478},{"KOIN ROBLOX 8 BIT",10159622004},
 }
+local FRIENDS = {}
 
 -- GUI parent (Delta: pakai gethui kalau ada)
 local guiParent = playerGui
@@ -127,11 +132,10 @@ local gui = new("ScreenGui", {
 }, guiParent)
 
 -- Tombol toggle (gambar) kiri atas, TIDAK bisa di-drag
--- Geser angka Position kalau nabrak icon Roblox
 local button = new("ImageButton", {
     Name = "AvatarButton", Image = TOGGLE_IMAGE, BackgroundTransparency = 1, BorderSizePixel = 0,
-    AnchorPoint = Vector2.new(0, 0), Position = UDim2.new(0, 100, 0, 6), Size = UDim2.new(0, 42, 0, 42),
-    ScaleType = Enum.ScaleType.Fit, AutoButtonColor = false, Draggable = false,
+    AnchorPoint = Vector2.new(0, 0), Position = TOGGLE_POS, Size = UDim2.new(0, TOGGLE_SIZE, 0, TOGGLE_SIZE),
+    ScaleType = Enum.ScaleType.Fit, AutoButtonColor = false, Draggable = false, ZIndex = 50,
 }, gui)
 local btnScale = new("UIScale", {}, button)
 button.MouseEnter:Connect(function() TS:Create(btnScale, TweenInfo.new(0.12), { Scale = 1.08 }):Play() end)
@@ -186,13 +190,14 @@ local statusLbl = lbl(mainFrame, "", UDim2.new(1, -160, 0, 14), UDim2.new(0, 140
 local applyBtn = mkBtn(mainFrame, "PAKAI", UDim2.new(0, 70, 0, 30), UDim2.new(0, 140, 0, 96), "blue", 12, 13)
 local resetBtn = mkBtn(mainFrame, "RESET", UDim2.new(0, 60, 0, 30), UDim2.new(0, 216, 0, 96), "red", 12, 13)
 local addBtn = mkBtn(mainFrame, "+ ADD", UDim2.new(0, 60, 0, 30), UDim2.new(0, 282, 0, 96), "cyan", 12, 13)
-local manualBox = mkBox("ID atau Username..", UDim2.new(0, 18, 0, 140), UDim2.new(1, -180, 0, 30))
+local manualBox = mkBox("ID / Username / Display..", UDim2.new(0, 18, 0, 140), UDim2.new(1, -180, 0, 30))
 local cekBtn = mkBtn(mainFrame, "CEK", UDim2.new(0, 70, 0, 30), UDim2.new(1, -158, 0, 140), "cyan", 15, 13)
 local copyBtn = mkBtn(mainFrame, "COPY", UDim2.new(0, 64, 0, 30), UDim2.new(1, -82, 0, 140), "blue", 15, 13)
-local tabBoys = mkBtn(mainFrame, "COWOK", UDim2.new(0, 66, 0, 30), UDim2.new(0, 18, 0, 180), "blue", 15, 12)
-local tabGirls = mkBtn(mainFrame, "CEWEK", UDim2.new(0, 66, 0, 30), UDim2.new(0, 88, 0, 180), "white", 15, 12)
-local tabItems = mkBtn(mainFrame, "ITEM", UDim2.new(0, 66, 0, 30), UDim2.new(0, 158, 0, 180), "white", 15, 12)
-local searchBox = mkBox("Cari..", UDim2.new(0, 228, 0, 180), UDim2.new(1, -246, 0, 30))
+local tabBoys = mkBtn(mainFrame, "COWOK", UDim2.new(0, 58, 0, 30), UDim2.new(0, 18, 0, 180), "blue", 15, 11)
+local tabGirls = mkBtn(mainFrame, "CEWEK", UDim2.new(0, 58, 0, 30), UDim2.new(0, 80, 0, 180), "white", 15, 11)
+local tabItems = mkBtn(mainFrame, "ITEM", UDim2.new(0, 58, 0, 30), UDim2.new(0, 142, 0, 180), "white", 15, 11)
+local tabFriends = mkBtn(mainFrame, "FRIEND", UDim2.new(0, 58, 0, 30), UDim2.new(0, 204, 0, 180), "white", 15, 11)
+local searchBox = mkBox("Cari..", UDim2.new(0, 268, 0, 180), UDim2.new(1, -286, 0, 30))
 
 local list = new("ScrollingFrame", {
     Position = UDim2.new(0, 18, 0, 220), Size = UDim2.new(1, -36, 1, -236), BackgroundTransparency = 1,
@@ -205,6 +210,7 @@ local tab, query, selected = "boys", "", nil
 local selectedItems, rows, rowInfo = {}, {}, {}
 local previewToken, busy, resolving = 0, false, false
 local lastAvatar = nil
+local friendsLoading, friendsLoaded = false, false
 
 -- ===== PENYIMPANAN (file executor, tidak hilang walau rejoin) =====
 local SAVE_FILE = "FreeAvaDelta.json"
@@ -305,10 +311,11 @@ end
 local function render()
     for _, r in ipairs(rows) do r:Destroy() end
     rows, rowInfo = {}, {}
-    local data = tab == "boys" and BOYS or (tab == "girls" and GIRLS or ITEMS)
+    local data = (tab == "boys" and BOYS) or (tab == "girls" and GIRLS) or (tab == "friends" and FRIENDS) or ITEMS
     local count = 0
     for idx, e in ipairs(data) do
-        if query == "" or string.find(string.lower(e.Name), query, 1, true) or string.find(tostring(e.Id), query, 1, true) then
+        if query == "" or string.find(string.lower(e.Name), query, 1, true) or string.find(tostring(e.Id), query, 1, true)
+            or (e.Sub and string.find(string.lower(e.Sub), query, 1, true)) then
             count = count + 1
             local row = new("TextButton", {
                 Text = "", AutoButtonColor = false, Size = UDim2.new(1, -8, 0, 44), LayoutOrder = idx,
@@ -327,7 +334,7 @@ local function render()
             end
             local w = x + 12 + (e.Custom and 36 or 0)
             lbl(row, e.Name, UDim2.new(1, -w, 0, 22), UDim2.new(0, x, 0, 4), 15, FT, C.text)
-            lbl(row, tostring(e.Id), UDim2.new(1, -w, 0, 14), UDim2.new(0, x, 0, 26), 11, FB, C.sub)
+            lbl(row, e.Sub and (e.Sub .. "  |  " .. e.Id) or tostring(e.Id), UDim2.new(1, -w, 0, 14), UDim2.new(0, x, 0, 26), 11, FB, C.sub)
             if e.Custom then
                 local del = new("TextButton", {
                     Text = "X", Size = UDim2.new(0, 28, 0, 28), Position = UDim2.new(1, -34, 0, 8), ZIndex = 2,
@@ -349,9 +356,41 @@ local function render()
         end
     end
     if count == 0 then
-        table.insert(rows, lbl(list, "Tidak ditemukan", UDim2.new(1, -8, 0, 40), nil, 14, FB, C.sub, Enum.TextXAlignment.Center))
+        local msg = "Tidak ditemukan"
+        if tab == "friends" and friendsLoading then msg = "Memuat friend.." end
+        table.insert(rows, lbl(list, msg, UDim2.new(1, -8, 0, 40), nil, 14, FB, C.sub, Enum.TextXAlignment.Center))
     end
     highlight()
+end
+
+-- ===== FRIEND otomatis =====
+local function loadFriends()
+    if friendsLoading then return end
+    friendsLoading = true
+    task.spawn(function()
+        local ok, pages = pcall(function() return Players:GetFriendsAsync(player.UserId) end)
+        if ok and pages then
+            local result = {}
+            for _ = 1, 30 do
+                local okp, page = pcall(function() return pages:GetCurrentPage() end)
+                if not okp or type(page) ~= "table" then break end
+                for _, f in ipairs(page) do
+                    local dn = (f.DisplayName and f.DisplayName ~= "") and f.DisplayName or f.Username
+                    table.insert(result, { Name = string.upper(dn), Id = f.Id, Sub = "@" .. tostring(f.Username) })
+                end
+                if pages.IsFinished then break end
+                if not pcall(function() pages:AdvanceToNextPageAsync() end) then break end
+            end
+            table.sort(result, function(a, b) return a.Name < b.Name end)
+            FRIENDS = result
+            friendsLoaded = true
+        end
+        friendsLoading = false
+        if tab == "friends" then
+            statusLbl.Text = friendsLoaded and (#FRIENDS .. " friend") or "Gagal muat friend"
+            render()
+        end
+    end)
 end
 
 local function setTab(t)
@@ -359,6 +398,7 @@ local function setTab(t)
     applyKind(tabBoys, t == "boys" and "blue" or "white")
     applyKind(tabGirls, t == "girls" and "blue" or "white")
     applyKind(tabItems, t == "items" and "blue" or "white")
+    applyKind(tabFriends, t == "friends" and "blue" or "white")
     statusLbl.Text = ""
     previewToken = previewToken + 1
     manualBox.PlaceholderText = (t == "items") and "ID item.." or "ID / Username / Display.."
@@ -382,11 +422,20 @@ local function setTab(t)
             idLbl.Text = "ID: -"
         end
     end
+    if t == "friends" then
+        if not friendsLoaded then
+            statusLbl.Text = "Memuat friend.."
+            loadFriends()
+        else
+            statusLbl.Text = #FRIENDS .. " friend"
+        end
+    end
     render()
 end
 tabBoys.MouseButton1Click:Connect(function() setTab("boys") end)
 tabGirls.MouseButton1Click:Connect(function() setTab("girls") end)
 tabItems.MouseButton1Click:Connect(function() setTab("items") end)
+tabFriends.MouseButton1Click:Connect(function() setTab("friends") end)
 searchBox:GetPropertyChangedSignal("Text"):Connect(function()
     query = string.lower(searchBox.Text)
     render()
@@ -414,9 +463,19 @@ local function resolveInput(raw)
 end
 
 -- ===== VERSI DELTA: semua lokal, tanpa RemoteFunction =====
+local ACC_TYPES = {
+    [8] = true, [41] = true, [42] = true, [43] = true, [44] = true, [45] = true, [46] = true, [47] = true,
+    [57] = true, [58] = true, [64] = true, [65] = true, [66] = true, [67] = true, [68] = true, [69] = true,
+    [70] = true, [71] = true, [72] = true,
+}
+
 local function getHum()
     local char = player.Character
     return char, char and char:FindFirstChildOfClass("Humanoid")
+end
+
+local function short(e)
+    return string.sub(tostring(e), 1, 38)
 end
 
 local function clearItems(char)
@@ -427,51 +486,187 @@ local function clearItems(char)
     end
 end
 
+local function loadAsset(id)
+    local ok, objs = pcall(function() return game:GetObjects("rbxassetid://" .. id) end)
+    if ok and type(objs) == "table" then return objs end
+    return nil, objs
+end
+
+local function findAccessory(objs)
+    for _, o in ipairs(objs or {}) do
+        if o:IsA("Accessory") then return o end
+        local a = o:FindFirstChildWhichIsA("Accessory", true)
+        if a then return a end
+    end
+end
+
+-- Pasang aksesori + weld manual kalau weld otomatis nggak kebentuk
+local function attachAccessory(char, hum, acc)
+    pcall(function() hum:AddAccessory(acc) end)
+    if acc.Parent ~= char then acc.Parent = char end
+    task.wait(0.1)
+    local handle = acc:FindFirstChild("Handle")
+    if not handle then return false end
+    if not handle:FindFirstChildWhichIsA("JointInstance") and not handle:FindFirstChildWhichIsA("WeldConstraint") then
+        handle.Anchored = false
+        handle.CanCollide = false
+        local att = handle:FindFirstChildOfClass("Attachment")
+        local target
+        if att then
+            for _, d in ipairs(char:GetDescendants()) do
+                if d:IsA("Attachment") and d.Name == att.Name and not d:IsDescendantOf(acc) then
+                    target = d
+                    break
+                end
+            end
+        end
+        local weld = Instance.new("Weld")
+        weld.Name = "AccessoryWeld"
+        weld.Part1 = handle
+        if target then
+            weld.Part0 = target.Parent
+            weld.C0 = target.CFrame
+            weld.C1 = att.CFrame
+        else
+            local head = char:FindFirstChild("Head")
+            if not head then return false end
+            local hat = head:FindFirstChild("HatAttachment")
+            weld.Part0 = head
+            weld.C0 = hat and hat.CFrame or CFrame.new(0, head.Size.Y / 2, 0)
+            weld.C1 = acc.AttachmentPoint
+        end
+        weld.Parent = handle
+    end
+    return true
+end
+
+-- Cara 1: HumanoidDescription
+local function descApply(hum, id)
+    local ok, desc = pcall(function() return Players:GetHumanoidDescriptionFromUserId(id) end)
+    if not ok or not desc then return false, "desc: " .. tostring(desc) end
+    local ok2, err = pcall(function() hum:ApplyDescription(desc) end)
+    if ok2 then return true end
+    local ok3 = pcall(function() hum:ApplyDescriptionReset(desc) end)
+    if ok3 then return true end
+    return false, "apply: " .. tostring(err)
+end
+
+-- Cara 2 (cadangan): pasang aset satu-satu (aksesori, baju, celana, wajah, warna kulit)
+local function manualAvatar(char, hum, id)
+    local ok, info = pcall(function() return Players:GetCharacterAppearanceInfoAsync(id) end)
+    if not ok or type(info) ~= "table" then return false, "info: " .. tostring(info) end
+    for _, c in ipairs(char:GetChildren()) do
+        if c:IsA("Accessory") or c:IsA("Shirt") or c:IsA("Pants") or c:IsA("ShirtGraphic") then c:Destroy() end
+    end
+    local bc = info.bodyColors
+    if type(bc) == "table" then
+        pcall(function()
+            local b = char:FindFirstChildOfClass("BodyColors") or Instance.new("BodyColors", char)
+            b.HeadColor = BrickColor.new(bc.headColorId)
+            b.TorsoColor = BrickColor.new(bc.torsoColorId)
+            b.LeftArmColor = BrickColor.new(bc.leftArmColorId)
+            b.RightArmColor = BrickColor.new(bc.rightArmColorId)
+            b.LeftLegColor = BrickColor.new(bc.leftLegColorId)
+            b.RightLegColor = BrickColor.new(bc.rightLegColorId)
+        end)
+    end
+    local n = 0
+    for _, a in ipairs(info.assets or {}) do
+        local tid = a.assetType and a.assetType.id
+        if tid and (ACC_TYPES[tid] or tid == 11 or tid == 12 or tid == 2 or tid == 18) then
+            local objs = loadAsset(a.id)
+            if objs then
+                if ACC_TYPES[tid] then
+                    local acc = findAccessory(objs)
+                    if acc then
+                        acc:SetAttribute("FreeAvaAvatar", true)
+                        if attachAccessory(char, hum, acc) then n = n + 1 end
+                    end
+                elseif tid == 18 then
+                    local decal = objs[1]
+                    local head = char:FindFirstChild("Head")
+                    if decal and decal:IsA("Decal") and head then
+                        local old = head:FindFirstChildOfClass("Decal")
+                        if old then old:Destroy() end
+                        decal.Name = "face"
+                        decal.Parent = head
+                        n = n + 1
+                    end
+                else
+                    for _, o in ipairs(objs) do
+                        if o:IsA("Shirt") or o:IsA("Pants") or o:IsA("ShirtGraphic") then
+                            o.Parent = char
+                            n = n + 1
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if n > 0 then return true end
+    return false, "tidak ada aset terpasang"
+end
+
 local function applyAvatar(id)
     if busy then return false end
-    local _, hum = getHum()
+    local char, hum = getHum()
     if not hum then statusLbl.Text = "Karakter belum ada" return false end
     busy = true
     statusLbl.Text = "Memproses.."
-    local ok, desc = pcall(function()
-        return Players:GetHumanoidDescriptionFromUserId(id)
-    end)
-    local ok2 = ok and desc ~= nil and pcall(function() hum:ApplyDescription(desc) end)
+    local ok, err = descApply(hum, id)
+    if not ok then
+        warn("[FreeAva] cara 1 gagal: " .. tostring(err))
+        statusLbl.Text = "Mode cadangan.."
+        local ok2, err2 = manualAvatar(char, hum, id)
+        if ok2 then ok = true else err = err2 or err end
+    end
     busy = false
-    if ok2 then lastAvatar = id saveData() end
-    statusLbl.Text = ok2 and "Berhasil dipakai!" or "Gagal, coba lagi"
-    return ok2
+    if ok then
+        lastAvatar = id
+        saveData()
+        statusLbl.Text = "Berhasil dipakai!"
+        if next(selectedItems) then
+            task.wait(0.3)
+            applyItems(false)
+            statusLbl.Text = "Berhasil dipakai!"
+        end
+    else
+        warn("[FreeAva] gagal: " .. tostring(err))
+        statusLbl.Text = "Gagal: " .. short(err)
+    end
+    return ok
 end
 
-local function applyItems(clear)
+applyItems = function(clear)
+    if busy then return end
     local char, hum = getHum()
     if not hum then statusLbl.Text = "Karakter belum ada" return end
     clearItems(char)
     if clear then statusLbl.Text = "Item dilepas!" return end
 
-    local n = 0
-    local any = false
+    local any, n = false, 0
+    busy = true
     for _, it in ipairs(ITEMS) do
         if selectedItems[it.Id] then
             any = true
-            local ok, objs = pcall(function()
-                return game:GetObjects("rbxassetid://" .. it.Id)
-            end)
-            local model = ok and objs and objs[1]
-            local acc = model and (model:IsA("Accessory") and model or model:FindFirstChildWhichIsA("Accessory", true))
+            local objs, err = loadAsset(it.Id)
+            local acc = objs and findAccessory(objs)
             if acc then
                 acc:SetAttribute("FreeAvaItem", true)
-                hum:AddAccessory(acc)
-                n = n + 1
+                if attachAccessory(char, hum, acc) then n = n + 1 else acc:Destroy() end
+            else
+                warn("[FreeAva] item " .. it.Id .. " gagal: " .. tostring(err or "bukan aksesori"))
             end
         end
     end
+    busy = false
     if not any then statusLbl.Text = "Pilih item dulu" return end
-    statusLbl.Text = n > 0 and ("Berhasil! " .. n .. " item") or "Gagal, coba lagi"
+    statusLbl.Text = n > 0 and ("Berhasil! " .. n .. " item") or "Gagal: item diblok / bukan aksesori"
 end
 
 local function addCustom()
     if resolving then return end
+    if tab == "friends" then statusLbl.Text = "Pilih tab COWOK / CEWEK dulu" return end
     resolving = true
     statusLbl.Text = "Mencari.."
     task.spawn(function()
@@ -542,24 +737,26 @@ resetBtn.MouseButton1Click:Connect(function()
         applyItems(true)
         return
     end
+    selectedItems = {}
     applyAvatar(player.UserId)
     lastAvatar = nil
     saveData()
 end)
 
--- Auto pasang lagi pas respawn
+-- Auto pasang lagi pas respawn (universal, semua map)
 player.CharacterAdded:Connect(function(char)
     char:WaitForChild("Humanoid")
-    task.wait(1)
+    task.wait(1.5)
+    busy = false
     if lastAvatar then
-        busy = false
         applyAvatar(lastAvatar)
-        task.wait(0.3)
+    elseif next(selectedItems) then
+        applyItems(false)
     end
-    if next(selectedItems) then applyItems(false) end
 end)
 
 render()
+loadFriends()
 
 -- Auto pasang yang tersimpan pas script dijalankan
 task.spawn(function()
@@ -568,7 +765,7 @@ task.spawn(function()
     task.wait(1.5)
     if lastAvatar then
         applyAvatar(lastAvatar)
-        task.wait(0.3)
+    elseif next(selectedItems) then
+        applyItems(false)
     end
-    if next(selectedItems) then applyItems(false) end
 end)
