@@ -1,6 +1,7 @@
--- FreeAvaTopbar V1 (Delta Version) - BY MCHLERN DEV
+-- FreeAvaTopbar V1 (Delta Version) - FIXED BODY + ANIMATION
 -- Jangan hapus credit yawh
--- BY MCHLERN DEV
+-- BY MCHLER DEV
+-- Fixed by MOOMYMELLS STUDIO
 
 local Players = game:GetService("Players")
 local TS = game:GetService("TweenService")
@@ -540,6 +541,31 @@ local function attachAccessory(char, hum, acc)
     return true
 end
 
+-- ===== ANIMASI: getcustomasset, anti-sanitize (by MOOMYMELLS STUDIO) =====
+local ANIM_FOLDER = "FreeAvaAnim"
+local canCustomAsset = type(getcustomasset) == "function" and canFS
+pcall(function() if makefolder then makefolder(ANIM_FOLDER) end end)
+
+local function resolveAnimId(id)
+    if not canCustomAsset then return "rbxassetid://" .. id end
+    local path = ANIM_FOLDER .. "/" .. id
+    if isfile(path) then
+        local ok, res = pcall(getcustomasset, path)
+        if ok and res then return res end
+    end
+    local ok, data = pcall(function()
+        return game:HttpGet("https://assetdelivery.roblox.com/v1/asset?id=" .. id, true)
+    end)
+    if ok and type(data) == "string" and #data > 500 and data:sub(1, 1) ~= "<" then
+        pcall(writefile, path, data)
+        if isfile(path) then
+            local ok2, res2 = pcall(getcustomasset, path)
+            if ok2 and res2 then return res2 end
+        end
+    end
+    return "rbxassetid://" .. id
+end
+
 -- ===== BADAN & ANIMASI (ApplyDescription ditolak di client, jadi dirakit manual) =====
 local R15_PARTS = {
     "Head", "UpperTorso", "LowerTorso", "LeftUpperArm", "LeftLowerArm", "LeftHand", "RightUpperArm", "RightLowerArm",
@@ -548,6 +574,14 @@ local R15_PARTS = {
 local R6_PARTS = { "Head", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg" }
 local descBlocked = false
 local origAnim = setmetatable({}, { __mode = "k" })
+
+-- Deteksi body part pakai NAMA assetType (anti hardcode ID berubah) (by MOOMYMELLS STUDIO)
+local function isBodyPart(at)
+    if not at then return false end
+    local n = string.lower(tostring(at.name or ""))
+    return n == "head" or n:find("arm", 1, true) ~= nil
+        or n:find("leg", 1, true) ~= nil or n:find("torso", 1, true) ~= nil
+end
 
 -- Ganti 1 part tubuh lokal dengan part dari sumber, joint dipindah supaya tetap nyambung
 local function swapPart(char, old, src)
@@ -645,7 +679,31 @@ local function applyModel(char, hum, model)
     return n
 end
 
--- Cara cadangan buat tubuh (R15): ambil part tubuh dari aset langsung
+-- ===== FULL CHARACTER REPLACE (by MOOMYMELLS STUDIO) =====
+-- Ganti character visual lokal pake model lengkap: tubuh, skala, baju, LC semua kebawa
+local function replaceCharacter(desc, rigType)
+    local char = player.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not hum then return false end
+    local model = makeModel(desc, rigType)
+    if not model then return false end
+
+    pcall(function() model:PivotTo(char:GetPivot()) end)
+
+    local oldAnim = char:FindFirstChild("Animate")
+    if oldAnim and not model:FindFirstChild("Animate") then
+        pcall(function() oldAnim:Clone().Parent = model end)
+    end
+
+    local ok = pcall(function() player.Character = model end)
+    if not ok then
+        pcall(function() model:Destroy() end)
+        return false
+    end
+    return true
+end
+
+-- Cadangan buat tubuh (R15): ambil part tubuh dari aset langsung
 local function findRigFolder(o)
     for _, nm in ipairs({ "R15ArtistIntent", "R15Fixed", "R15" }) do
         if o.Name == nm then return o end
@@ -658,8 +716,7 @@ local function assetBody(char, hum, info)
     if hum.RigType ~= Enum.HumanoidRigType.R15 then return 0 end
     local n = 0
     for _, a in ipairs(info.assets or {}) do
-        local tid = a.assetType and a.assetType.id
-        if tid == 17 or (tid and tid >= 27 and tid <= 31) then
+        if isBodyPart(a.assetType) then
             local objs = loadAsset(a.id)
             for _, o in ipairs(objs or {}) do
                 local folder = findRigFolder(o)
@@ -760,6 +817,7 @@ local ANIMS = {
     { "ClimbAnimation", "climb", { "ClimbAnim" } },
     { "SwimAnimation", "swim", { "Swim" } },
 }
+-- Pakai resolveAnimId (getcustomasset) supaya gak kena sanitize (by MOOMYMELLS STUDIO)
 local function applyAnimations(char, hum, desc)
     if hum.RigType ~= Enum.HumanoidRigType.R15 then return 0 end
     local animate = char:FindFirstChild("Animate")
@@ -774,7 +832,7 @@ local function applyAnimations(char, hum, desc)
                 if an and an:IsA("Animation") then
                     if not origAnim[an] then origAnim[an] = an.AnimationId end
                     if id and id ~= 0 then
-                        an.AnimationId = "rbxassetid://" .. id
+                        an.AnimationId = resolveAnimId(id)
                         n = n + 1
                     else
                         an.AnimationId = origAnim[an]
@@ -786,6 +844,11 @@ local function applyAnimations(char, hum, desc)
     return n
 end
 
+-- ===== APPLY AVATAR: tangga fallback (by MOOMYMELLS STUDIO) =====
+-- 1) ApplyDescription langsung (kalau game allow)
+-- 2) Swap part dari model hasil CreateHumanoidModelFromDescription
+-- 3) Full character replace (model jadi character lokal)
+-- 4) manualAvatar (aset satu per satu)
 local function applyAvatar(id)
     if busy then return false end
     local char, hum = getHum()
@@ -806,6 +869,8 @@ local function applyAvatar(id)
                 warn("[FreeAva] ApplyDescription ditolak: " .. tostring(errA))
             end
         end
+
+        -- Method 2: swap part dari model
         if not ok then
             statusLbl.Text = "Memuat tubuh.."
             local model = makeModel(desc, hum.RigType)
@@ -819,11 +884,24 @@ local function applyAvatar(id)
                 end
             end
         end
+
+        -- Method 3: full character replace
+        if not ok then
+            statusLbl.Text = "Ganti character.."
+            if replaceCharacter(desc, hum.RigType) then
+                task.wait(0.2)
+                char, hum = getHum()
+                if hum then
+                    ok, bodyOk = true, true
+                end
+            end
+        end
     else
         err = "desc: " .. tostring(desc)
     end
 
-    if not ok then
+    -- Method 4: manual (aset satu per satu)
+    if not ok and hum then
         statusLbl.Text = "Mode cadangan.."
         local ok2, err2, nb = manualAvatar(char, hum, id)
         if ok2 then
@@ -833,7 +911,8 @@ local function applyAvatar(id)
         end
     end
 
-    if ok and okD and desc then
+    -- Animasi target (anti-sanitize)
+    if ok and okD and desc and hum then
         local okN, n = pcall(applyAnimations, char, hum, desc)
         if okN then animN = n or 0 end
     end
@@ -849,8 +928,11 @@ local function applyAvatar(id)
         statusLbl.Text = msg
         if next(selectedItems) then
             task.wait(0.3)
-            applyItems(false)
-            statusLbl.Text = msg
+            char, hum = getHum()
+            if hum then
+                applyItems(false)
+                statusLbl.Text = msg
+            end
         end
     else
         warn("[FreeAva] gagal: " .. tostring(err))
