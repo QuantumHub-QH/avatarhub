@@ -1,8 +1,6 @@
--- FreeAvaTopbar V1 (Delta Version) - FIXED BODY + ANIMATION + SKIN COLOR
--- Jangan hapus credit yawh
--- BY MCHLER DEV
--- Fixed by MOOMYMELLS STUDIO
--- Extra Fix: BodyColors + Animations full copy (2026)
+-- FreeAvaTopbar V1 (Delta Version) - FULL FIXED UNIVERSAL
+-- BY MCHLER DEV | Fixed by MOOMYMELLS STUDIO
+-- Extra Fix 2026: Body + Skin Color + Animation + Universal (All Map)
 
 local Players = game:GetService("Players")
 local TS = game:GetService("TweenService")
@@ -612,20 +610,19 @@ end
 local function makeModel(desc, rig)
 	local ok, m = pcall(function() return Players:CreateHumanoidModelFromDescription(desc, rig) end)
 	if ok and typeof(m) == "Instance" then return m end
-	warn("[FreeAva] CreateHumanoidModelFromDescription gagal: " .. tostring(m))
 	return nil, tostring(m)
 end
 
 local function applyModel(char, hum, model)
 	local mh = model:FindFirstChildOfClass("Humanoid")
-	if not mh or mh.RigType \~= hum.RigType then error("rig model beda / tidak ada humanoid") end
+	if not mh or mh.RigType \~= hum.RigType then error("rig model beda") end
 	local names = (hum.RigType == Enum.HumanoidRigType.R15) and R15_PARTS or R6_PARTS
 	local oldReq = hum.RequiresNeck
 	pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false) end)
 	pcall(function() hum.RequiresNeck = false end)
 
 	local n = 0
-	local okSwap, errSwap = pcall(function()
+	pcall(function()
 		for _, nm in ipairs(names) do
 			local old, src = char:FindFirstChild(nm), model:FindFirstChild(nm)
 			if old and src and old:IsA("BasePart") and src:IsA("BasePart") then
@@ -634,7 +631,6 @@ local function applyModel(char, hum, model)
 			end
 		end
 	end)
-	if not okSwap then warn("[FreeAva] swap part: " .. tostring(errSwap)) end
 
 	for _, c in ipairs(char:GetChildren()) do
 		if c:IsA("CharacterMesh") or c:IsA("Accessory") or c:IsA("Shirt") or c:IsA("Pants")
@@ -709,22 +705,9 @@ local function assetBody(char, hum, info)
 					for _, mp in ipairs(folder:GetChildren()) do
 						local old = char:FindFirstChild(mp.Name)
 						if mp:IsA("BasePart") and old and old:IsA("BasePart") and mp.Name \~= "HumanoidRootPart" then
-							local okS = pcall(swapPart, char, old, mp)
-							if okS then n = n + 1 end
+							if pcall(swapPart, char, old, mp) then n = n + 1 end
 						end
 					end
-				end
-			end
-		end
-	end
-	if n > 0 then
-		for _, j in ipairs(char:GetDescendants()) do
-			if j:IsA("Motor6D") and j.Part0 and j.Part1 then
-				local a0 = j.Part0:FindFirstChild(j.Name .. "RigAttachment")
-				local a1 = j.Part1:FindFirstChild(j.Name .. "RigAttachment")
-				if a0 and a1 and a0:IsA("Attachment") and a1:IsA("Attachment") then
-					j.C0 = a0.CFrame
-					j.C1 = a1.CFrame
 				end
 			end
 		end
@@ -740,7 +723,7 @@ local function manualAvatar(char, hum, id)
 	end
 	local bodyN = 0
 	local okB, nB = pcall(assetBody, char, hum, info)
-	if okB then bodyN = nB or 0 else warn("[FreeAva] assetBody: " .. tostring(nB)) end
+	if okB then bodyN = nB or 0 end
 
 	local bc = info.bodyColors
 	if type(bc) == "table" then
@@ -791,10 +774,9 @@ local function manualAvatar(char, hum, id)
 	return false, "tidak ada aset terpasang", 0
 end
 
--- ===== FORCE BODY COLORS =====
+-- FORCE BODY COLORS
 local function forceBodyColors(char, desc)
 	if not char or not desc then return end
-
 	local old = char:FindFirstChildOfClass("BodyColors")
 	if old then old:Destroy() end
 
@@ -816,12 +798,9 @@ local function forceBodyColors(char, desc)
 		LeftUpperLeg = desc.LeftLegColor, LeftLowerLeg = desc.LeftLegColor, LeftFoot = desc.LeftLegColor,
 		RightUpperLeg = desc.RightLegColor, RightLowerLeg = desc.RightLegColor, RightFoot = desc.RightLegColor,
 		Torso = desc.TorsoColor,
-		["Left Arm"] = desc.LeftArmColor,
-		["Right Arm"] = desc.RightArmColor,
-		["Left Leg"] = desc.LeftLegColor,
-		["Right Leg"] = desc.RightLegColor,
+		["Left Arm"] = desc.LeftArmColor, ["Right Arm"] = desc.RightArmColor,
+		["Left Leg"] = desc.LeftLegColor, ["Right Leg"] = desc.RightLegColor,
 	}
-
 	for name, color in pairs(colorMap) do
 		local part = char:FindFirstChild(name)
 		if part and part:IsA("BasePart") then
@@ -830,12 +809,9 @@ local function forceBodyColors(char, desc)
 	end
 end
 
--- ===== ANIMASI LEBIH STABIL =====
+-- ANIMASI LEBIH STABIL
 local function applyAnimations(char, hum, desc)
-	if not desc or not hum or hum.RigType \~= Enum.HumanoidRigType.R15 then
-		return 0
-	end
-
+	if not desc or not hum or hum.RigType \~= Enum.HumanoidRigType.R15 then return 0 end
 	local animate = char:FindFirstChild("Animate")
 	if not animate then return 0 end
 
@@ -864,9 +840,7 @@ local function applyAnimations(char, hum, desc)
 			for _, nm in ipairs(m.names) do
 				local an = folder:FindFirstChild(nm)
 				if an and an:IsA("Animation") then
-					if not origAnim[an] then
-						origAnim[an] = an.AnimationId
-					end
+					if not origAnim[an] then origAnim[an] = an.AnimationId end
 					local newId = resolveAnimId(id)
 					if newId and newId \~= "" then
 						an.AnimationId = newId
@@ -882,7 +856,6 @@ local function applyAnimations(char, hum, desc)
 		task.wait(0.03)
 		animate.Disabled = false
 	end)
-
 	return n
 end
 
@@ -897,18 +870,23 @@ local function applyAvatar(id)
 	local ok, err, bodyOk, animN = false, nil, false, 0
 
 	if okD and desc then
+		-- Method 1
 		if not descBlocked then
 			local okA, errA = pcall(function()
-				hum:ApplyDescription(desc, Enum.AssetTypeVerification.ClientOnly)
+				if Enum.AssetTypeVerification then
+					hum:ApplyDescription(desc, Enum.AssetTypeVerification.ClientOnly)
+				else
+					hum:ApplyDescription(desc)
+				end
 			end)
 			if okA then
 				ok, bodyOk = true, true
 			else
 				descBlocked = true
-				warn("[FreeAva] ApplyDescription ditolak: " .. tostring(errA))
 			end
 		end
 
+		-- Method 2
 		if not ok then
 			statusLbl.Text = "Memuat tubuh.."
 			local model = makeModel(desc, hum.RigType)
@@ -917,26 +895,24 @@ local function applyAvatar(id)
 				pcall(function() model:Destroy() end)
 				if okM then
 					ok, bodyOk = true, (nOrErr or 0) > 0
-				else
-					warn("[FreeAva] applyModel gagal: " .. tostring(nOrErr))
 				end
 			end
 		end
 
+		-- Method 3
 		if not ok then
 			statusLbl.Text = "Ganti character.."
 			if replaceCharacter(desc, hum.RigType) then
-				task.wait(0.2)
+				task.wait(0.25)
 				char, hum = getHum()
-				if hum then
-					ok, bodyOk = true, true
-				end
+				if hum then ok, bodyOk = true, true end
 			end
 		end
 	else
 		err = "desc: " .. tostring(desc)
 	end
 
+	-- Method 4
 	if not ok and hum then
 		statusLbl.Text = "Mode cadangan.."
 		local ok2, err2, nb = manualAvatar(char, hum, id)
@@ -947,7 +923,7 @@ local function applyAvatar(id)
 		end
 	end
 
-	-- Force warna kulit + animasi
+	-- Force warna + animasi
 	if ok and okD and desc and char and hum then
 		pcall(forceBodyColors, char, desc)
 		local okN, n = pcall(applyAnimations, char, hum, desc)
@@ -972,7 +948,6 @@ local function applyAvatar(id)
 			end
 		end
 	else
-		warn("[FreeAva] gagal: " .. tostring(err))
 		statusLbl.Text = "Gagal: " .. short(err)
 	end
 	return ok
@@ -990,19 +965,17 @@ applyItems = function(clear)
 	for _, it in ipairs(ITEMS) do
 		if selectedItems[it.Id] then
 			any = true
-			local objs, err = loadAsset(it.Id)
+			local objs = loadAsset(it.Id)
 			local acc = objs and findAccessory(objs)
 			if acc then
 				acc:SetAttribute("FreeAvaItem", true)
 				if attachAccessory(char, hum, acc) then n = n + 1 else acc:Destroy() end
-			else
-				warn("[FreeAva] item " .. it.Id .. " gagal: " .. tostring(err or "bukan aksesori"))
 			end
 		end
 	end
 	busy = false
 	if not any then statusLbl.Text = "Pilih item dulu" return end
-	statusLbl.Text = n > 0 and ("Berhasil! " .. n .. " item") or "Gagal: item diblok / bukan aksesori"
+	statusLbl.Text = n > 0 and ("Berhasil! " .. n .. " item") or "Gagal: item diblok"
 end
 
 local function addCustom()
